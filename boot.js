@@ -1,17 +1,40 @@
 // boot.js
 (async function initBoxedWine() {
-    // 正しいユーザー名とリポジトリ名に修正済み
     const USERNAME = "a728238";
     const REPO = "wine";
     const baseURL = `https://${USERNAME}.github.io/${REPO}`;
 
-    // 1. CSSの動的読み込み
+    // 1. about:blank 上に UI / Canvas 画面要素を動的生成
+    if (!document.getElementById("canvas")) {
+        // UI スタイル適用
+        document.body.style.backgroundColor = "#000";
+        document.body.style.margin = "0";
+        document.body.style.overflow = "hidden";
+
+        // メインコンテナ
+        const container = document.createElement("div");
+        container.id = "boxedwine-container";
+        container.style.cssText = "width: 100vw; height: 100vh; display: flex; justify-content: center; align-items: center;";
+
+        // BoxedWine が描画に使用する Canvas
+        const canvas = document.createElement("canvas");
+        canvas.id = "canvas";
+        canvas.style.cssText = "width: 100%; height: 100%; object-fit: contain;";
+        
+        // Contextmenu（右クリックメニュー）の誤動作を防止
+        canvas.oncontextmenu = (e) => e.preventDefault();
+
+        container.appendChild(canvas);
+        document.body.appendChild(container);
+    }
+
+    // 2. CSSの動的読み込み
     const cssLink = document.createElement("link");
     cssLink.rel = "stylesheet";
     cssLink.href = `${baseURL}/SingleThreaded/boxedwine.css`;
     document.head.appendChild(cssLink);
 
-    // 2. 分割ZIPファイルの取得と結合
+    // 3. 分割ZIPファイルの取得と結合
     console.log("[BoxedWine] 分割アーカイブの取得を開始します...");
 
     const partFiles = [
@@ -38,15 +61,16 @@
 
         console.log("[BoxedWine] 結合完了。Blob URLを準備しました:", zipBlobURL);
 
-        // 3. Configの設定
+        // 4. Config の設定（Canvas 要素の参照設定を含む）
         window.Config = {
             locateFile: (path) => `${baseURL}/SingleThreaded/${path}`,
             urlParams: "",
             appZip: zipBlobURL,
-            arguments: ["/bin/sh", "/root/run.sh"]
+            arguments: ["/bin/sh", "/root/run.sh"],
+            canvas: document.getElementById("canvas")
         };
 
-        // 4. スクリプトの動的ロード
+        // 5. スクリプトの動的ロード
         const loadScript = (src) => new Promise((resolve, reject) => {
             const script = document.createElement("script");
             script.src = src;

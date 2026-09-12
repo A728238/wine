@@ -4,28 +4,38 @@
     const REPO = "wine";
     const baseURL = `https://${USERNAME}.github.io/${REPO}`;
 
-    // 1. about:blank 上に UI / Canvas 画面要素を動的生成
+    // 1. BoxedWineに必要なDOM要素群を一括生成
     if (!document.getElementById("canvas")) {
-        // UI スタイル適用
-        document.body.style.backgroundColor = "#000";
+        document.body.style.backgroundColor = "#111";
         document.body.style.margin = "0";
-        document.body.style.overflow = "hidden";
+        document.body.style.color = "#fff";
+        document.body.style.fontFamily = "sans-serif";
 
-        // メインコンテナ
-        const container = document.createElement("div");
-        container.id = "boxedwine-container";
-        container.style.cssText = "width: 100vw; height: 100vh; display: flex; justify-content: center; align-items: center;";
+        const wrapper = document.createElement("div");
+        wrapper.id = "boxedwine-wrapper";
+        wrapper.style.cssText = "width: 100vw; height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center;";
 
-        // BoxedWine が描画に使用する Canvas
+        // ステータス表示部
+        const status = document.createElement("div");
+        status.id = "status";
+        status.innerText = "Downloading & Initializing...";
+        status.style.cssText = "margin: 8px; font-weight: bold;";
+
+        // Canvas描画エリア
         const canvas = document.createElement("canvas");
         canvas.id = "canvas";
-        canvas.style.cssText = "width: 100%; height: 100%; object-fit: contain;";
-        
-        // Contextmenu（右クリックメニュー）の誤動作を防止
+        canvas.style.cssText = "width: 800px; height: 600px; background-color: #000; border: 1px solid #444;";
         canvas.oncontextmenu = (e) => e.preventDefault();
 
-        container.appendChild(canvas);
-        document.body.appendChild(container);
+        // ログ出力用（非表示）
+        const output = document.createElement("textarea");
+        output.id = "output";
+        output.style.display = "none";
+
+        wrapper.appendChild(status);
+        wrapper.appendChild(canvas);
+        wrapper.appendChild(output);
+        document.body.appendChild(wrapper);
     }
 
     // 2. CSSの動的読み込み
@@ -47,9 +57,7 @@
         const responses = await Promise.all(
             partFiles.map(async (url) => {
                 const res = await fetch(url);
-                if (!res.ok) {
-                    throw new Error(`ファイルの取得に失敗しました: ${url} (HTTP Status: ${res.status})`);
-                }
+                if (!res.ok) throw new Error(`ファイルの取得に失敗しました: ${url}`);
                 console.log(`[Loaded] ${url}`);
                 return res.arrayBuffer();
             })
@@ -59,16 +67,23 @@
         const mergedZipBlob = new Blob(responses, { type: "application/zip" });
         const zipBlobURL = URL.createObjectURL(mergedZipBlob);
 
-        console.log("[BoxedWine] 結合完了。Blob URLを準備しました:", zipBlobURL);
+        // 4. Config & Module の定義 (両方設定して互換性を確保)
+        const canvasElem = document.getElementById("canvas");
+        const statusElem = document.getElementById("status");
 
-        // 4. Config の設定（Canvas 要素の参照設定を含む）
-        window.Config = {
+        const configObj = {
             locateFile: (path) => `${baseURL}/SingleThreaded/${path}`,
             urlParams: "",
             appZip: zipBlobURL,
             arguments: ["/bin/sh", "/root/run.sh"],
-            canvas: document.getElementById("canvas")
+            canvas: canvasElem,
+            setStatus: (text) => {
+                if (statusElem) statusElem.innerText = text;
+            }
         };
+
+        window.Config = configObj;
+        window.Module = configObj; // Shellスクリプト側の直接参照に対応
 
         // 5. スクリプトの動的ロード
         const loadScript = (src) => new Promise((resolve, reject) => {

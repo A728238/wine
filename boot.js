@@ -4,58 +4,48 @@
     const REPO = "wine";
     const baseURL = `https://${USERNAME}.github.io/${REPO}`;
 
-    // 1. boxedwine-shell.js が参照する可能性のある全 DOM 要素をあらかじめ生成
+    // 1. BoxedWine Shell が参照する DOM 要素群を全生成して document.body 直下に確定配置
     if (!document.getElementById("canvas")) {
-        document.body.style.backgroundColor = "#111";
+        document.body.style.backgroundColor = "#1a1a1a";
         document.body.style.margin = "0";
         document.body.style.color = "#fff";
         document.body.style.fontFamily = "sans-serif";
 
-        const wrapper = document.createElement("div");
-        wrapper.id = "boxedwine-wrapper";
-        wrapper.style.cssText = "width: 100vw; height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center;";
+        const container = document.createElement("div");
+        container.style.cssText = "display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh;";
 
-        // 必須UI要素群
+        // 必須 UI 要素
         const status = document.createElement("div");
         status.id = "status";
-        status.innerText = "Downloading & Initializing...";
-        status.style.cssText = "margin: 8px; font-weight: bold;";
+        status.innerText = "Downloading files...";
+        status.style.cssText = "margin-bottom: 10px; font-weight: bold;";
 
         const canvas = document.createElement("canvas");
         canvas.id = "canvas";
         canvas.width = 800;
         canvas.height = 600;
-        canvas.style.cssText = "background-color: #000; border: 1px solid #444;";
+        canvas.style.cssText = "background-color: #000; border: 1px solid #555;";
         canvas.oncontextmenu = (e) => e.preventDefault();
 
-        // boxedwine-shell.js がイベントを付与する要素群 (ダミー生成)
-        const dummyIDs = [
+        // boxedwine-shell.js が参照する可能性のある ID 要素を全てダミーとして追加
+        const ids = [
             "run-link", "run-button", "startBtn", "soundToggle", 
             "items", "fullscreen", "btnConsole", "output", "upload", "zip-input"
         ];
-
-        dummyIDs.forEach(id => {
+        ids.forEach(id => {
             if (!document.getElementById(id)) {
-                let elem;
-                if (id === "soundToggle" || id === "zip-input") {
-                    elem = document.createElement("input");
-                    elem.type = id === "soundToggle" ? "checkbox" : "file";
-                } else if (id === "items") {
-                    elem = document.createElement("select");
-                } else if (id === "output") {
-                    elem = document.createElement("textarea");
-                } else {
-                    elem = document.createElement("button");
-                }
+                const elem = (id === "soundToggle" || id === "zip-input") 
+                    ? document.createElement("input") 
+                    : (id === "items" ? document.createElement("select") : document.createElement("button"));
                 elem.id = id;
                 elem.style.display = "none";
-                wrapper.appendChild(elem);
+                container.appendChild(elem);
             }
         });
 
-        wrapper.appendChild(status);
-        wrapper.appendChild(canvas);
-        document.body.appendChild(wrapper);
+        container.appendChild(status);
+        container.appendChild(canvas);
+        document.body.appendChild(container);
     }
 
     // 2. CSSのロード
@@ -87,30 +77,33 @@
         const mergedZipBlob = new Blob(responses, { type: "application/zip" });
         const zipBlobURL = URL.createObjectURL(mergedZipBlob);
 
-        console.log("[BoxedWine] 結合完了。Blob URL:", zipBlobURL);
+        console.log("[BoxedWine] 結合完了。");
 
-        // 4. Config & Module の構築
         const canvasElem = document.getElementById("canvas");
         const statusElem = document.getElementById("status");
 
-        const configObj = {
+        // 4. Config / Module の全般定義
+        const moduleConfig = {
             locateFile: (path) => `${baseURL}/SingleThreaded/${path}`,
             urlParams: "",
             appZip: zipBlobURL,
-            arguments: ["wine", "explorer", "/desktop=wine,800x600"],
             canvas: canvasElem,
+            // 起動時に自動実行するコマンド引数をセットアップ
+            arguments: ["wine", "explorer", "/desktop=wine,800x600"],
             setStatus: (text) => {
                 if (statusElem && text) statusElem.innerText = text;
             },
             print: (text) => console.log("[BoxedWine Out]", text),
-            printErr: (text) => console.warn("[BoxedWine Err]", text)
+            printErr: (text) => console.warn("[BoxedWine Err]", text),
+            
+            // Emscripten の準備完了フック
+            noInitialRun: false
         };
 
-        // グローバルへ紐付け
-        window.Config = configObj;
-        window.Module = configObj;
+        window.Config = moduleConfig;
+        window.Module = moduleConfig;
 
-        // 5. スクリプトの動的ロード
+        // 5. スクリプト読込用ヘルパー
         const loadScript = (src) => new Promise((resolve, reject) => {
             const script = document.createElement("script");
             script.src = src;
@@ -119,11 +112,17 @@
             document.head.appendChild(script);
         });
 
-        // shell のロード完了を待ってから main (boxedwine.js) をロード
+        // スクリプトのロード（shell の準備を確実に終えてから main へ）
         await loadScript(`${baseURL}/SingleThreaded/boxedwine-shell.js`);
-        await loadScript(`${baseURL}/SingleThreaded/boxedwine.js`);
+        
+        // shell 側が要求する関数の呼び出しチェック（定義されている場合）
+        if (typeof window.startWith === "function") {
+            window.startWith(zipBlobURL);
+        } else {
+            await loadScript(`${baseURL}/SingleThreaded/boxedwine.js`);
+        }
 
-        console.log("[BoxedWine] 初期化シーケンス完了。");
+        console.log("[BoxedWine] 正常に起動シーケンスが完了しました。");
 
     } catch (err) {
         console.error("[BoxedWine ERROR]", err);
